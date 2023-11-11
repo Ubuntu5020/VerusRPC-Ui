@@ -7,3 +7,5 @@ Experimental Wallet WebUI for VerusCoin
     npm install
   
     node app.js
+
+Open `http://localhost:8080` in your browser
