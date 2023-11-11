@@ -98,7 +98,7 @@
               {% else %}
               <option value=""> </option>
               {% for c in vars.currencies %}
-              {% if c[1].isFractional and c[1].currencies.length > 1 %}
+              {% if c[1].isFractional and c[1].currencies.length > 1 and c[1].startblock < vars.info.blocks %}
               <option value="{{c[0]}}">{{c[0]}}</option>
               {% endif %}
               {% endfor %}
@@ -337,7 +337,7 @@ function addToUserInput() {
             <select name="via`+i+`" id="via`+i+`" class="form-select" aria-label="SelectCurrency">
               <option value=""> </option>
               {% for c in vars.currencies %}
-              {% if c[1].isFractional and c[1].currencies.length > 1 %}
+              {% if c[1].isFractional and c[1].currencies.length > 1 and c[1].startblock < vars.info.blocks %}
               <option value="{{c[0]}}">{{c[0]}}</option>
               {% endif %}
               {% endfor %}
