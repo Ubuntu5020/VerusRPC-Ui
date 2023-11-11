@@ -1,0 +1,8 @@
+{
+  "rpcuser": "",
+  "rpcpass": "",
+  "rpchost": "",
+  "rpcport": "",
+  
+  "listenport": 8080
+}

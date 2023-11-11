@@ -1,0 +1,19 @@
+<div class="card container-sm mb-2">
+  <div class="card-body">
+    <h5 class="card-title">Currencies</h5>
+    <table class="table">
+      <thead>
+        <tr>
+          <th class="w-auto" scope="col">Name</th>
+          <th scope="col">Options</th>
+          <th scope="col"> </th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for name in vars.currencynames %}
+        {% include 'currenciesrow', id:forloop.index %}
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>

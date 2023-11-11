@@ -1,0 +1,31 @@
+{% liquid
+    assign cpill = "text-bg-secondary p-2 px-3"
+    assign calert = ""
+    if op[1].status == "success"    
+      assign cpill = "text-bg-success p-2 px-3"
+      assign calert = "alert alert-success"
+    endif
+    if op[1].status == "failed"
+      assign cpill = "text-bg-danger p-2 px-3"
+      assign calert = "alert alert-danger"
+    endif
+    if op[1].status == "executing"
+      assign cpill = "text-bg-light p-2 px-3"
+    endif
+%}
+<h2 class="accordion-header" id="opid-row-heading{{op[0]}}">
+<button class="{{calert}} accordion-button collapsed m-0" type="button" data-bs-toggle="collapse" data-bs-target="#opid-row-collapse{{op[0]}}" aria-expanded="false" aria-controls="opid-row-collapse{{op[0]}}">
+  {{ op[0] | truncate: 12 }}{{ op[0] | slice: -6,6 }}
+  <span class="badge rounded-pill {{cpill}} ms-2">{{op[1].status}}</span>
+</button>
+</h2>
+<div id="opid-row-collapse{{op[0]}}" class="accordion-collapse collapse m-0 p-0 mt-2" aria-labelledby="opid-row-heading{{op[0]}}" data-bs-parent="#accordionOperations">
+  <div class="accordion-body m-0 p-0">
+    {% if op[1].status == "failed" or op[1].status == "success" %}
+    <div class="mb-2">
+      <a class="btn btn-secondary clear-opid position-relative top-0 start-0 bg-dark-subtle" href="/api/opid/clear/{{op[0]}}" target="_blank">CLEAR</a>
+    </div>
+    {% endif %}
+    <pre>{{ op[1] | json : 2 }}</pre>
+  </div>
+</div>

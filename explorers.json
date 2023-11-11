@@ -1,0 +1,12 @@
+{
+  "VRSC": { 
+    "blockUrl": "https://insight.verus.io/block/",
+    "txUrl": "https://insight.verus.io/tx/",
+    "addressUrl":"https://insight.verus.io/address/"
+  },
+  "VRSCTEST": { 
+    "blockUrl": "https://testex.verus.io/block/",
+    "txUrl": "https://testex.verus.io/tx/",
+    "addressUrl":"https://testex.verus.io/address/"
+  }
+}

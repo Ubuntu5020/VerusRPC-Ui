@@ -1,0 +1,80 @@
+<div class="card container-sm mb-2">
+  <div class="card-body">
+    <h5 class="card-title">Addresses</h5>
+    
+    <div class="accordion accordion-flush" id="accordionFlush">
+
+      {% if vars.addresses.identities.length > 0 %}
+      <div class="accordion-item">
+        <h2 class="accordion-header-sm" id="flush-headingID">
+        <button class="accordion-button btn-sm collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#flush-collapseID" aria-expanded="false" aria-controls="flush-collapsePUBLIC">
+          IDs
+        </button>
+        </h2>
+        <div id="flush-collapseID" class="accordion-collapse collapse" aria-labelledby="flush-headingID" data-bs-parent="#accordionFlush">
+        <div class="accordion-body">
+          <table class="table">
+            <tbody>
+            {% for address in vars.addresses.identities %}
+              <tr>
+                  <th scope="row">{{forloop.index}}</td>
+                  <td>{{ address }}</td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        </div>
+      </div>
+      {% endif %}
+      
+
+      <div class="accordion-item">
+        <h5 class="accordion-header" id="flush-headingPUBLIC">
+          <button class="accordion-button btn-sm collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#flush-collapsePUBLIC" aria-expanded="false" aria-controls="flush-collapsePUBLIC">
+            Public
+          </button>
+        </h5>
+        <div id="flush-collapsePUBLIC" class="accordion-collapse collapse" aria-labelledby="flush-headingPUBLIC" data-bs-parent="#accordionFlush">
+        <div class="accordion-body">
+          <table class="table">
+            <tbody>
+            {% for address in vars.addresses.public %}
+              <tr>
+                  <td>{{ address }}</td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        </div>
+      </div>
+      
+      {% if vars.addresses.private.length > 0 %}
+      <div class="accordion-item">
+        <h6 class="accordion-header" id="flush-headingPRIVATE">
+          <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#flush-collapsePRIVATE" aria-expanded="false" aria-controls="flush-collapsePRIVATE">
+            Private
+          </button>
+        </h6>
+        <div id="flush-collapsePRIVATE" class="accordion-collapse collapse" aria-labelledby="flush-headingPRIVATE" data-bs-parent="#accordionFlush">
+        <div class="accordion-body">
+          <table class="table">
+            <tbody>
+            {% for address in vars.addresses.private %}
+              <tr>
+                  <td>{{ address }}</td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        </div>
+      </div>
+      {% endif %}
+    
+    </div>
+  </div>
+</div>
+
+

@@ -1,0 +1,12 @@
+{% assign balances = vars.balances %}
+
+<div class="container-sm p-0 mb-2">
+  <div class="accordion" id="accordionBalances">
+  {% assign totals = balances.totals %}
+  {% for balance in balances.balances %}
+    <div class="accordion-item">
+      {% include 'balancesrow', id:forloop.index %}
+    </div>
+  {% endfor %}
+  </div>
+</div>

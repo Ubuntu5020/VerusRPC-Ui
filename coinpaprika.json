@@ -1,0 +1,22 @@
+{
+  "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV": { 
+    "name": "VRSC",
+    "id": "vrsc-verus-coin",
+    "ticker": "https://api.coinpaprika.com/v1/tickers/vrsc-verus-coin?quotes=BTC,USD"
+  },
+  "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X": {
+    "name": "vETH",
+    "id": "eth-ethereum",
+    "ticker": "https://api.coinpaprika.com/v1/tickers/eth-ethereum?quotes=BTC,USD"
+  },
+  "iGBs4DWztRNvNEJBt4mqHszLxfKTNHTkhM": {
+    "name": "DAI.vETH",
+    "id": "dai-dai",
+    "ticker": "https://api.coinpaprika.com/v1/tickers/dai-dai?quotes=BTC,USD"
+  },
+  "iCkKJuJScy4Z6NSDK7Mt42ZAB2NEnAE1o4": {
+    "name": "MKR.vETH",
+    "id": "mkr-maker",
+    "ticker": "https://api.coinpaprika.com/v1/tickers/mkr-maker?quotes=BTC,USD"
+  }
+}

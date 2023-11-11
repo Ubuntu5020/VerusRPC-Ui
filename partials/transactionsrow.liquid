@@ -1,0 +1,37 @@
+<h2 class="accordion-header" id="transactions-heading{{id}}">
+<button class="accordion-button collapsed m-0" type="button" data-bs-toggle="collapse" data-bs-target="#transactions-collapse{{id}}" aria-expanded="false" aria-controls="transactions-collapse{{id}}">
+  <span class="p-0">{{ tx[1].txid | truncate: 12 }}{{ tx[1].txid | slice: -6, 6 }}</span>
+  {% if tx[1].height > 0 %}
+    <span class="badge text-bg-success rounded-pill p-2 px-3 ms-2">
+      in-block <big>{{ tx[1].height }}</big>
+    </span>
+    {% if tx[1].confirmations > 0 %}
+    <span class="badge text-bg-secondary rounded-pill p-2 px-3 ms-2">
+      <big>{{ tx[1].confirmations }}</big> confirms
+    </span>
+    {% endif %}
+  {% elsif tx[1].expiryheight > 0 %}
+    <span class="badge text-bg-warning rounded-pill p-2 px-3 ms-2">
+      <big>unconfirmed</big>
+    </span>
+    <span class="badge text-bg-secondary rounded-pill p-2 px-3 ms-2">
+      <big>{{ tx[1].expiryheight | minus: vars.info.blocks }}</big> blocks until expire
+    </span>
+  {% elsif tx[1].error %}
+    <span class="badge text-bg-danger rounded-pill p-2 px-3 ms-2">
+      <big>error</big>
+    </span>
+  {% endif %}
+</button>
+</h2>
+<div id="transactions-collapse{{id}}" class="accordion-collapse collapse m-0 p-0 mt-2" aria-labelledby="transactions-heading{{id}}" data-bs-parent="#accordionTransactions">
+  <div class="accordion-body m-0 p-0">
+    <div class="mb-2">
+      {% if tx[1].blockhash.length > 0 %}
+      <a class="btn btn-secondary position-relative top-0 start-0" href="{{vars.explorers[vars.coin].blockUrl}}{{tx[1].blockhash}}" target="_blank">Explore Block</a>
+      {% endif %}
+      <a class="btn btn-secondary position-relative top-0 start-0" href="{{vars.explorers[vars.coin].txUrl}}{{tx[1].txid}}" target="_blank">Explore TXID</a>
+    </div>
+    <pre>{{ tx[1] | json: 2 }}</pre>
+  </div>
+</div>

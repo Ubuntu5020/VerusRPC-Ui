@@ -1,0 +1,370 @@
+{% layout 'layout' %}
+
+{% assign addresses = vars.addresses %}
+
+<div class="card container-sm mb-2">
+  <div class="card-body">
+  <h5 class="card-title">Send Currency</h5>
+  <p> </p>
+  <form id="sendForm" action="/send" method="post" enctype="multipart/form-data">    
+    <div class="row mb-2">
+      <div class="input-group">
+        <span class="input-group-text justify-content-end" id="basic-addon1" style="min-width:6rem;">From</span>
+        <input name="fromAddress" id="fromAddress" type="text" class="form-control" list="addresses", placeholder="*">
+        <datalist id="addresses">
+          {% for address in addresses.identities %}
+            <option value="{{address}}">
+          {% endfor %}
+          {% for address in addresses.public %}
+            <option value="{{address}}">
+          {% endfor %}
+          {% for address in addresses.private %}
+            <option value="{{address}}">
+          {% endfor %}
+        </datalist>
+      </div>
+    </div>
+    
+    <div id="toUsers">
+    
+      <div id="touser0">
+        <div class="row mb-2">
+          <div class="input-group">
+            <span class="input-group-text justify-content-end" style="min-width:6rem;">To</span>
+            <input name="toAddress0" id="toAddress0" type="text" class="form-control">
+            <button id="addtouser" type="button" class="input-group-text btn btn-secondary">
+              <i class="fa-solid fa-user-plus"></i>
+            </button>
+          </div>
+        </div>
+        
+        <div class="row mb-2">
+          <div class="input-group me-2">
+            <span class="input-group-text justify-content-end" id="basic-addon1" style="min-width:6rem;">Amount</span>
+            <input name="amount0" id="amount0" type="number" class="form-control" aria-describedby="basic-addon1" step="0.00000001" min="0">
+            <span class="ms-2">
+            <select name="currency0" id="currency0" class="form-select" aria-label="SelectCurrency">
+              <option value="{{vars.coin}}" selected>{{vars.coin}}</option>
+              {% for coin in vars.coins %}
+              {% if coin != vars.coin %}
+              <option value="{{coin}}">{{coin}}</option>
+              {% endif %}
+              {% endfor %}
+            </select>
+            </span>
+            <span class="ms-2">
+            <button id="sendmax" type="button" class="input-group-text btn btn-secondary" disabled>
+              Max
+            </button>
+            </span>
+          </div>
+        </div>
+      </div>
+      
+      <div id="additionalToUsers" class="alert alert-secondary mb-2 pb-1 d-none">
+        <div class="pb-3">
+          <span>Multi Send Currency</span>
+          <button type="button" class="btn btn-secondary btn-sm float-end" onclick="delToUserInput()">
+            <i class="fa-solid fa-user-minus"></i>
+          </button>
+        </div>
+      </div>
+        
+    </div>
+    
+    <div class="row mb-2">
+      <div class="input-group">
+        <span class="input-group-text justify-content-end" style="min-width:6rem;">Fee</span>
+        <input name="fee" id="fee" type="number" class="form-control fee" step="0.00000001" min="0" placeholder="optional">
+      </div>
+    </div>
+    
+    <div class="row">
+      <div class="input-group justify-content-end">
+        <span class="input-group-text">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="true" name="subtractfee" id="subtractfee">
+            <label class="form-check-label" for="flexCheckChecked">
+              Subtract Fee from Amount?
+            </label>
+          </div>
+        </span>
+        <button id="verifyFirstButton" type="button" class="btn btn-primary">
+          Verify &amp; Send
+        </button>
+      </div>
+    </div>
+    
+    <div id="sendConfirm" class="modal fade" id="staticConfirmBackdrop" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="staticConfirmBackdropLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h1 class="modal-title fs-5" id="staticConfirmBackdropLabel">Send Currency Confirm</h1>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div id="sendConfirmBody" class="modal-body">
+            ...
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-success">Confirm</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  <input type="hidden" name="verified" id="verified" value="false">
+  </form>
+
+  </div>
+</div>
+
+{% include 'balances' %}
+
+<script type="text/javascript">
+var total_tousers = 1;
+var balances = {{ balances | json }};
+
+function showConfirmError(rsp) {
+  if (typeof rsp == "string") {
+    $('#sendConfirmBody').html(rsp);
+  } else if (typeof rsp == "object") {
+    $('#sendConfirmBody').html("<pre>"+JSON.stringify(rsp, null, 2)+"<pre>");
+  } else {
+    $('#sendConfirmBody').html("error <pre>"+rsp+"<pre>");
+  }
+  $('#sendConfirm').modal('show');
+}
+
+function showConfirmModel(rsp) {
+  let fee =  $('#fee').val();
+  let rpcString = rsp.method + " ";
+  for(let i in rsp.params) {
+    rpcString = rpcString + JSON.stringify(rsp.params[i], null, 2) + " ";
+  }
+  
+  let usersHtml = "";
+  let totalAmount = {};
+  let firstCurrency = undefined;
+  for (let i=0; i<total_tousers; i++) {
+    let toaddr =  $('#toAddress'+i).val();
+    let amount = $('#amount'+i).val();
+    let currency = $('#currency'+i).val();
+    if (!firstCurrency) { firstCurrency = currency; }
+    if (totalAmount[currency]) {
+      totalAmount[currency] += Number(amount);
+    } else {
+      totalAmount[currency] = Number(amount);
+    }
+    if (total_tousers == 1 && $('#subtractfee').is(':checked')) {
+      amount = (Number(amount) - Number(fee)).toFixed(8);
+    }
+    usersHtml += '<div class="row m-0 p-1 pb-2"><code class="text-lg">' + amount + ' ' + currency + ' to '+ toaddr + '</code></div>';
+  }
+  let html = '<div class="row m-0 p-1">Send' + usersHtml + '</div>';
+  if (Object.keys(totalAmount).length > 0) {
+    html += '<div class="row m-0 p-1 pt-0">Total';
+    for (let t in totalAmount) {
+      html += '<span><code class="text-lg">' + totalAmount[t].toFixed(8) + ' ' + t + '</code></span>';
+    }
+    html += "</div>";
+  }
+  if (total_tousers == 1 && $('#fee').val().length > 0) {
+    html += '<div class="row m-0 p-1">Fee <code class="text-lg">' + fee + ' ' + firstCurrency + '</code></div>';
+  } else {
+    html += '<div class="row m-0 p-1">Fee <code class="text-lg">auto</code></div>';
+  }
+  html += '<div class="row m-0 p-1">rpc<pre class="pb-3">'+rpcString+'</pre></div>';
+  $('#sendConfirmBody').html(html);
+  $('#sendConfirm').modal('show');
+}
+
+function checkIsInvalid(rsp) {
+  let r = false;
+  // clear invalid params
+  $('#fromAddress').removeClass("is-invalid");
+  $('#fee').removeClass("is-invalid");
+  for(let i=0; i<total_tousers; i++) {
+    $('#toAddress'+i).removeClass("is-invalid");
+    $('#amount'+i).removeClass("is-invalid");
+    $('#currency'+i).removeClass("is-invalid");
+  }
+  
+  // check for invalid params
+  if (rsp.invalid) {
+    for (let i in rsp.invalid) {
+      $('#'+rsp.invalid[i]).addClass("is-invalid");
+      r = true;
+    }
+  }
+  return r;
+}
+
+function submitSendToForm() {
+  let request=$.ajax({
+    url: "/send",
+    type: "POST",
+    data: $('#sendForm').serialize(),
+    dataType: "text",
+    success: function (data) {
+      let rsp = JSON.parse(data);
+      if (!rsp.error) {
+        if (!checkIsInvalid(rsp)) {
+          if (rsp.verify) {
+            $('#verified').val("true");
+            // verify and resubmit
+            showConfirmModel(rsp);
+          } else if (rsp.opid) {
+            // success
+            location.reload()
+          } else {
+            // error
+            console.log("rsp.error", rsp);
+            showConfirmError(rsp);
+          }
+        }
+      } else {
+        showConfirmError(rsp.error);
+      }
+    },
+    error: function (err) {
+      if (err.responseText) {
+        let e;
+        try { e = JSON.parse(err.responseText); }catch { e = undefined; }
+        if (e) {
+          if (!checkIsInvalid(e)) {
+            showConfirmError(e);
+          }
+        } else {
+          showConfirmError(err.responseText);
+        }
+      } else {
+        alert("Fatal Error");
+      }
+    }
+  });
+}
+
+function checkSendMaxButton() {
+  let currency = $('#currency0').val();
+  if (balances.balances[currency][$('#fromAddress').val()]) {
+      $('#sendmax').prop("disabled", "");
+  } else {
+      $('#sendmax').prop("disabled", "true");
+  }
+}
+
+function onSendMaxClick() {
+  let currency = $('#currency0').val();
+  if (balances.balances[currency][$('#fromAddress').val()]) {
+    if ($('#amount0').val() != balances.balances[currency][$('#fromAddress').val()]) {
+      if ($('#fee').val().length == 0 || Number($('#fee').val()) == 0) {
+        $('#fee').val("0.0001");
+      }
+      $('#subtractfee').prop('checked', true);
+      $('#amount0').val(balances.balances[currency][$('#fromAddress').val()]);
+      return;
+    }
+  } else {
+    $('#sendmax').prop("disabled", "true");
+  }
+  $('#amount0').val("");
+}
+
+function addToUserInput() {
+  if (total_tousers < 20) {
+    let i = total_tousers;
+    let html = `
+      <div id="touser`+i+`" class="touser">
+        <div class="row mb-2">
+          <div class="input-group">
+            <span class="input-group-text justify-content-end" style="min-width:6rem;">To</span>
+            <input name="toAddress`+i+`" id="toAddress`+i+`" type="text" class="form-control">
+          </div>
+        </div>
+        <div class="row mb-2">
+          <div class="input-group me-2">
+            <span class="input-group-text justify-content-end" id="basic-addon1" style="min-width:6rem;">Amount</span>
+            <input name="amount`+i+`" id="amount`+i+`" type="number" class="form-control" aria-describedby="basic-addon1" step="0.00000001" min="0">
+            <span class="ms-2">
+            <select name="currency`+i+`" id="currency`+i+`" class="form-select" aria-label="SelectCurrency">
+              <option value="{{vars.coin}}" selected>{{vars.coin}}</option>
+              {% for coin in vars.coins %}
+              {% if coin != vars.coin %}
+              <option value="{{coin}}">{{coin}}</option>
+              {% endif %}
+              {% endfor %}
+            </select>
+            </span>
+          </div>
+        </div>
+      </div>
+    `;
+    $('#additionalToUsers').removeClass("d-none");
+    $('#additionalToUsers').append(html);
+    total_tousers++;
+  }
+}
+
+function delToUserInput() {
+  if (total_tousers > 0) {
+    $(".touser").last().remove();
+    total_tousers--;
+  }
+  if (total_tousers <= 1) {
+    total_tousers = 1;
+    $('#additionalToUsers').addClass("d-none");
+  }
+}
+
+$(document).ready(function() {
+
+  $('#fromAddress').on('input', checkSendMaxButton);
+  $('#currency0').on('change', checkSendMaxButton);
+  
+  $('#sendmax').on('click', onSendMaxClick);
+
+  $('#addtouser').on('click', addToUserInput);
+
+  $('#subtractfee').on('change', function () {
+    if ($(this).is(':checked')) {
+      if ($('#fee').val().length == 0 || Number($('#fee').val()) == 0) {
+        $('#fee').val("0.0001");
+      }
+    }
+  });
+  
+  $("#verifyFirstButton").on('click', function(event) {	
+    event.preventDefault();
+    // make sure we always verify first
+    $('#verified').val("false");
+    submitSendToForm();
+  });
+  $("#sendForm").submit(function(event) {	
+    event.preventDefault();
+    submitSendToForm();
+  });
+
+});
+</script>
+
+{% if vars.opid_count > 0 %}
+<script type="text/javascript">
+$(document).ready(function() {
+  let url = $(location).attr('href');
+  if (url.indexOf("#txidMonitor") < 0) {
+    $("#offcanvasOperations").offcanvas("show");
+  }
+});
+</script>
+{% endif %}
+{% if vars.opid_count == 0 and vars.txid_count > 0 %}
+<script type="text/javascript">
+$(document).ready(function() {
+  let url = $(location).attr('href');
+  if (url.indexOf("#opidMonitor") < 0) {
+    $("#offcanvasTransactions").offcanvas("show");
+  }
+});
+</script>
+{% endif %}

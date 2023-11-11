@@ -1,0 +1,30 @@
+{% assign currency = vars.currencies[name] %}
+<tr>
+  <td>
+    <button type="button" class="btn btn-dark"><a href="/view/{{ currency.currencyid }}" class="link-underline link-underline-opacity-0">{{ name | truncate: 32  }}</a></button>
+    {% if currency.startblock > vars.info.blocks %}<span class="badge text-bg-info"> <i class="fa-solid fa-arrow-down-up-across-line"></i> PRELAUNCH</span>{% endif %}
+  </td>
+  <td class="w-100">
+    {% if currency.isPBaaS %} 
+      {% if currency.name == vars.info.name %}
+        <i class="fa-brands fa-fort-awesome"></i> Native
+      {% else %}
+        <i class="fa-solid fa-link"></i> PBaaS
+      {% endif %}
+    {% endif %}
+    {% if currency.isNFT %}<i class="fa-solid fa-puzzle-piece"></i> NFT
+    {% elsif currency.isGateway %} <i class="fa-solid fa-money-bill-transfer"></i> Gateway
+    {% elsif currency.isGatewayConverter %}<i class="fa-solid fa-bridge"></i> Converter
+    {% elsif currency.isFractional %}
+      {% if vars.currencies[name].bestcurrencystate.reservecurrencies.size > 1 %}
+        <i class="fa-solid fa-basket-shopping"></i> Fractional
+      {% else %}
+        <i class="fa-solid fa-percent"></i> Fractional
+      {% endif %}
+    {% elsif currency.isToken %} <i class="fa-solid fa-coins"></i> Token
+    {% endif %}
+  </td>
+  <td>
+  {% if currency.nativecurrencyid %}<code>{{currency.nativecurrencyid.address | json: 2}}</code>{% endif %}
+  </td>
+</tr>
