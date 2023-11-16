@@ -83,7 +83,7 @@ class VerusPROC {
               let via = " "; // via not used
               if (c.via) { via = c.via; }
               c.estimate_reverse[via] = e.estimatedcurrencyout;
-            }/80
+            }
           }
           
           // check spentTxId's for progress
