@@ -43,17 +43,12 @@
             Wallet
           </a>
           <ul class="dropdown-menu">
-            <li><a class="dropdown-item" href="/send">Send</a></li>
             <li><a class="dropdown-item" href="/receive">Receive</a></li>
-          </ul>
-        </li>
-
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-            DeFI
-          </a>
-          <ul class="dropdown-menu">
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="/send">Send</a></li>
             <li><a class="dropdown-item" href="/convert">Convert</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="/exportto">Send Cross Network</a></li>
           </ul>
         </li>
       </ul>
@@ -66,9 +61,11 @@
           assign rcss = "text-bg-success"
         endif
     %}
-    <a class="btn btn-dark m-0 p-0 px-2 ms-1 {{rcss}}">
+    <a class="btn btn-dark m-0 p-0 px-2 mx-2 {{rcss}}">
+    <span class="text-nowrap">
     <small>Next Block</small> <i class="fa-solid fa-cubes ms-1"></i> {{ vars.nextblockreward.height }}
     &nbsp; <small>Reward</small> <i class="fa-solid fa-trophy"></i> {{ vars.nextblockreward.reward }} <small>{{vars.coin}}</small>
+    </span>
     </a>
     <!--
     {% if vars.tickers[vars.coin] %}

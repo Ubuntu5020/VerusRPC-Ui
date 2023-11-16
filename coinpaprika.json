@@ -1,22 +1,13 @@
 {
-  "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV": { 
-    "name": "VRSC",
-    "id": "vrsc-verus-coin",
-    "ticker": "https://api.coinpaprika.com/v1/tickers/vrsc-verus-coin?quotes=BTC,USD"
-  },
-  "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X": {
-    "name": "vETH",
-    "id": "eth-ethereum",
-    "ticker": "https://api.coinpaprika.com/v1/tickers/eth-ethereum?quotes=BTC,USD"
-  },
-  "iGBs4DWztRNvNEJBt4mqHszLxfKTNHTkhM": {
-    "name": "DAI.vETH",
-    "id": "dai-dai",
-    "ticker": "https://api.coinpaprika.com/v1/tickers/dai-dai?quotes=BTC,USD"
-  },
-  "iCkKJuJScy4Z6NSDK7Mt42ZAB2NEnAE1o4": {
-    "name": "MKR.vETH",
-    "id": "mkr-maker",
-    "ticker": "https://api.coinpaprika.com/v1/tickers/mkr-maker?quotes=BTC,USD"
-  }
+  "vrsc-verus-coin": "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV",
+  "eth-ethereum": "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X",
+  "dai-dai":  "iGBs4DWztRNvNEJBt4mqHszLxfKTNHTkhM",
+  "mkr-maker": "iCkKJuJScy4Z6NSDK7Mt42ZAB2NEnAE1o4",
+  "link-chainlink": "iJczmut8fHgRvVxaNfEPm7SkgJLDFtPcrK",
+  "eurc-eurc": "iC5TQFrFXSYLQGkiZ8FYmZHFJzaRF5CYgE",
+  "wbtc-wrapped-bitcoin": "iS3NjE3XRYWoHRoovpLhFnbDraCq7NFStf",
+  "usdt-tether": "i9oCSqKALwJtcv49xUKS2U2i79h1kX6NEY",
+  "usdc-usd-coin": "i61cV2uicKSi1rSMQCBNQeSYC3UAi9GVzd",
+  "trac-origintrail": "iEnQEjjozf1HZkqFT9U4NKnzz1iGZ7LbJ4",
+  "mars4-mars4": "iNtUUdjsqV34snGZJerAvPLaojo6tV9sfd"
 }

@@ -1,11 +1,11 @@
 {% layout 'layout' %}
-
 {% assign addresses = vars.addresses %}
 
 <div class="card container-sm mb-2">
-  <div class="card-body">
-  <h5 class="card-title">Send Currency</h5>
+  <div class="card-body">  
+  <h5 class="card-title">Send Cross Network</h5>
   <p> </p>
+
   <form id="sendForm" action="/send" method="post" enctype="multipart/form-data">    
     <div class="row mb-2">
       <div class="input-group">
@@ -42,28 +42,33 @@
           <div class="input-group me-2">
             <span class="input-group-text justify-content-end" id="basic-addon1" style="min-width:6rem;">Amount</span>
             <input name="amount0" id="amount0" type="number" class="form-control" aria-describedby="basic-addon1" step="0.00000001" min="0">
-            <span class="ms-2">
             <select name="currency0" id="currency0" class="form-select" aria-label="SelectCurrency">
-              <option value="{{vars.coin}}" selected>{{vars.coin}}</option>
-              {% for coin in vars.coins %}
-              {% if coin != vars.coin %}
-              <option value="{{coin}}">{{coin}}</option>
+              {% for g in vars.currencies %}
+              {% if g[1].isGateway %}
+                <option value="{{g[0]}}">{{g[0]}}</option>
+                {% for coin in vars.coins %}
+                {% if not vars.currencies[coin].isGatewayConverter and g[1].currencyid == vars.currencies[coin].parent %}
+                <option value="{{coin}}">{{coin}}</option>
+                {% endif %}
+                {% endfor %}
               {% endif %}
               {% endfor %}
             </select>
-            </span>
-            <span class="ms-2">
-            <button id="sendmax" type="button" class="input-group-text btn btn-secondary" disabled>
-              Max
-            </button>
-            </span>
+            <span class="input-group-text justify-content-end" id="basic-addon1" style="min-width:7rem;">Export To</span>
+            <select name="exportto0" id="exportto0" class="form-select" aria-label="SelectExportTo">
+              {% for c in vars.currencies %}
+              {% if c[1].isGateway %}
+              <option value="{{c[0]}}">{{c[0]}}</option>
+              {% endif %}
+              {% endfor %}
+            </select>
           </div>
         </div>
       </div>
       
       <div id="additionalToUsers" class="alert alert-secondary mb-2 pb-1 d-none">
         <div class="pb-3">
-          <span>Multi Send Currency</span>
+          <span>Multi Export</span>
           <button type="button" class="btn btn-secondary btn-sm float-end" onclick="delToUserInput()">
             <i class="fa-solid fa-user-minus"></i>
           </button>
@@ -72,23 +77,8 @@
         
     </div>
     
-    <div class="row mb-2">
-      <div class="input-group">
-        <span class="input-group-text justify-content-end" style="min-width:6rem;">Fee</span>
-        <input name="fee" id="fee" type="number" class="form-control fee" step="0.00000001" min="0" placeholder="optional">
-      </div>
-    </div>
-    
     <div class="row">
-      <div class="input-group justify-content-end">
-        <span class="input-group-text">
-          <div class="form-check">
-            <input class="form-check-input" type="checkbox" value="true" name="subtractfee" id="subtractfee">
-            <label class="form-check-label" for="flexCheckChecked">
-              Subtract Fee from Amount?
-            </label>
-          </div>
-        </span>
+      <div class="input-group justify-content-end no-wrap">
         <button id="verifyFirstButton" type="button" class="btn btn-primary">
           Verify &amp; Send
         </button>
@@ -99,7 +89,7 @@
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
           <div class="modal-header">
-            <h1 class="modal-title fs-5" id="staticConfirmBackdropLabel">Send Verify</h1>
+            <h1 class="modal-title fs-5" id="staticConfirmBackdropLabel">Export Verify</h1>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div id="sendConfirmBody" class="modal-body">
@@ -122,7 +112,6 @@
 {% include 'balances' %}
 
 <script type="text/javascript">
-var coin = "{{vars.coin}}";
 var total_tousers = 1;
 var balances = {{ balances | json }};
 
@@ -130,7 +119,7 @@ function showConfirmError(rsp) {
   if (typeof rsp == "string") {
     $('#sendConfirmBody').html(rsp);
   } else if (typeof rsp == "object") {
-    $('#sendConfirmBody').html("<pre>"+JSON.stringify(rsp, null, 2)+"<pre>");
+    $('#sendConfirmBody').html("<div class='border border-danger'><pre>"+JSON.stringify(rsp, null, 2)+"</pre></div>");
   } else {
     $('#sendConfirmBody').html("error <pre>"+rsp+"<pre>");
   }
@@ -138,31 +127,33 @@ function showConfirmError(rsp) {
 }
 
 function showConfirmModel(rsp) {
-  let fee =  $('#fee').val();
   let rpcString = rsp.method + " ";
   for(let i in rsp.params) {
     rpcString = rpcString + JSON.stringify(rsp.params[i], null, 2) + " ";
   }
-  
-  let usersHtml = "";
+
+  if (rsp.error) {
+    let html = "<pre>"+rsp.error+"</pre>";
+    $('#sendConfirmBody').html(html);
+    $('#sendConfirm').modal('show');
+    return;
+  }
+
+  let usersHtml = "Export";
   let totalAmount = {};
-  let firstCurrency = undefined;
   for (let i=0; i<total_tousers; i++) {
     let toaddr =  $('#toAddress'+i).val();
     let amount = $('#amount'+i).val();
     let currency = $('#currency'+i).val();
-    if (!firstCurrency) { firstCurrency = currency; }
-    if (i == 0 && currency == coin && $('#subtractfee').is(':checked')) {
-      amount = (Number(amount) - Number(fee)).toFixed(8);
-    }
     if (totalAmount[currency]) {
       totalAmount[currency] += Number(amount);
     } else {
       totalAmount[currency] = Number(amount);
     }
-    usersHtml += '<div class="row m-0 p-1 pb-2"><code class="text-lg">' + amount + ' ' + currency + ' to '+ toaddr + '</code></div>';
+    usersHtml += '<div class="row m-0 p-1"><code class="text-lg">' + amount + ' ' + currency + ' to<br />'+ toaddr + '<br />using gateway '+$('#exportto'+i).val()+'</code></div>';
   }
-  let html = 'Send' + usersHtml;
+  let html = usersHtml;
+
   if (rsp.fees) {
     html += '<div class="row m-0 p-1 pt-0">Fees';
     for (let c in rsp.fees) {
@@ -191,11 +182,12 @@ function checkIsInvalid(rsp) {
   let r = false;
   // clear invalid params
   $('#fromAddress').removeClass("is-invalid");
-  $('#fee').removeClass("is-invalid");
   for(let i=0; i<total_tousers; i++) {
     $('#toAddress'+i).removeClass("is-invalid");
     $('#amount'+i).removeClass("is-invalid");
     $('#currency'+i).removeClass("is-invalid");
+    $('#exportto'+i).removeClass("is-invalid");
+    $('#via'+i).removeClass("is-invalid");
   }
   
   // check for invalid params
@@ -253,32 +245,6 @@ function submitSendToForm() {
   });
 }
 
-function checkSendMaxButton() {
-  let currency = $('#currency0').val();
-  if (balances.balances[currency][$('#fromAddress').val()]) {
-      $('#sendmax').prop("disabled", "");
-  } else {
-      $('#sendmax').prop("disabled", "true");
-  }
-}
-
-function onSendMaxClick() {
-  let currency = $('#currency0').val();
-  if (balances.balances[currency][$('#fromAddress').val()]) {
-    if ($('#amount0').val() != balances.balances[currency][$('#fromAddress').val()]) {
-      if ($('#fee').val().length == 0 || Number($('#fee').val()) == 0) {
-        $('#fee').val("0.0001");
-      }
-      $('#subtractfee').prop('checked', true);
-      $('#amount0').val(balances.balances[currency][$('#fromAddress').val()]);
-      return;
-    }
-  } else {
-    $('#sendmax').prop("disabled", "true");
-  }
-  $('#amount0').val("");
-}
-
 function addToUserInput() {
   if (total_tousers < 20) {
     let i = total_tousers;
@@ -287,23 +253,38 @@ function addToUserInput() {
         <div class="row mb-2">
           <div class="input-group">
             <span class="input-group-text justify-content-end" style="min-width:6rem;">To</span>
-            <input name="toAddress`+i+`" id="toAddress`+i+`" type="text" class="form-control" value="`+$('#toAddress0').val()+`">
+            <input name="toAddress`+i+`" id="toAddress`+i+`" type="text" class="form-control">
           </div>
         </div>
         <div class="row mb-2">
           <div class="input-group me-2">
             <span class="input-group-text justify-content-end" id="basic-addon1" style="min-width:6rem;">Amount</span>
-            <input name="amount`+i+`" id="amount`+i+`" type="number" class="form-control" aria-describedby="basic-addon1" step="0.00000001" min="0" value="`+$('#amount0').val()+`">
-            <span class="ms-2">
+            <input name="amount`+i+`" id="amount`+i+`" type="number" class="form-control" aria-describedby="basic-addon1" step="0.00000001" min="0">
             <select name="currency`+i+`" id="currency`+i+`" class="form-select" aria-label="SelectCurrency">
-              <option value="{{vars.coin}}" selected>{{vars.coin}}</option>
-              {% for coin in vars.coins %}
-              {% if coin != vars.coin %}
-              <option value="{{coin}}">{{coin}}</option>
+              {% for g in vars.currencies %}
+              {% if g[1].isGateway %}
+                <option value="{{g[0]}}">{{g[0]}}</option>
+                {% for coin in vars.coins %}
+                {% if not vars.currencies[coin].isGatewayConverter and g[1].currencyid == vars.currencies[coin].parent %}
+                <option value="{{coin}}">{{coin}}</option>
+                {% endif %}
+                {% endfor %}
               {% endif %}
               {% endfor %}
             </select>
-            </span>
+            <span class="input-group-text justify-content-end" id="basic-addon1" style="min-width:7rem;">Export To</span>
+            <select name="exportto`+i+`" id="exportto`+i+`" class="form-select" aria-label="SelectExportTo">
+              {% for c in vars.currencies %}
+              {% if c[1].isGateway %}
+              <option value="{{c[0]}}">{{c[0]}}</option>
+              {% endif %}
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="row mb-2">
+          <div class="input-group me-2">
+            
           </div>
         </div>
       </div>
@@ -326,21 +307,7 @@ function delToUserInput() {
 }
 
 $(document).ready(function() {
-
-  $('#fromAddress').on('input', checkSendMaxButton);
-  $('#currency0').on('change', checkSendMaxButton);
-  
-  $('#sendmax').on('click', onSendMaxClick);
-
   $('#addtouser').on('click', addToUserInput);
-
-  $('#subtractfee').on('change', function () {
-    if ($(this).is(':checked')) {
-      if ($('#fee').val().length == 0 || Number($('#fee').val()) == 0) {
-        $('#fee').val("0.0001");
-      }
-    }
-  });
   
   $("#verifyFirstButton").on('click', function(event) {	
     event.preventDefault();
@@ -352,7 +319,6 @@ $(document).ready(function() {
     event.preventDefault();
     submitSendToForm();
   });
-
 });
 </script>
 
@@ -365,8 +331,7 @@ $(document).ready(function() {
   }
 });
 </script>
-{% endif %}
-{% if vars.opid_count == 0 and vars.txid_count > 0 %}
+{% elsif vars.opid_count == 0 and vars.txid_count > 0 %}
 <script type="text/javascript">
 $(document).ready(function() {
   let url = $(location).attr('href');

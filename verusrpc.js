@@ -1,4 +1,7 @@
-const crypto = require('crypto');
+const fs = require('fs');
+
+const crypto = require('node:crypto');
+const { isAddress } = require('web3-validator');
 
 const axios = require('axios');
 const sqlite3 = require('sqlite3').verbose();
@@ -91,6 +94,17 @@ class VerusRPC {
       });
       await p;
       await this.createCache();
+      
+      // restore saved conversions
+      if (fs.existsSync("conversions.json")) {
+        let data = fs.readFileSync("conversions.json");
+        let json = undefined;
+        try { json = JSON.parse(data); }
+        catch { json = undefined; }
+        if (json) {
+          this.conversions = json;
+        }
+      }
     }
         
     getnativecoin() {
@@ -155,6 +169,7 @@ class VerusRPC {
     set_market_ticker(name, ticker) {
       if (this.currencies[name]) {
         this.tickers[name] = ticker;
+        this.tickers[name].last_udpated = Date.now();
       }
     }
     
@@ -213,7 +228,7 @@ class VerusRPC {
         delete this.txs[txid];
       }
     }
-    async add_conversion(txid, currency, convertto, via, amount, destaddr, spentTxId) {
+    async add_conversion(txid, currency, convertto, via, amount, destaddr, n, now) {
       let sid = txid+currency+convertto+via+amount;
       let uid = crypto.createHash('sha256').update(sid).digest().toString('hex');
       let c = {
@@ -225,8 +240,8 @@ class VerusRPC {
         convertto: convertto,
         via: via,
         destination: destaddr,
-        started: Date.now(),
-        spentTxId: spentTxId
+        started: now,
+        n: n
       };
       for (let i in this.conversions){
         let conv = this.conversions[i];
@@ -241,9 +256,13 @@ class VerusRPC {
       let e = await this.estimateConversion(amount, currency, convertto, via, false);
       if (e) {
         c.estimate = e.estimatedcurrencyout;
+      } else {
+        console.error("failed to get estimate for conversion");
       }
       this.conversions.push(c);
       console.log("new conversion", txid, c);
+      // dump conversions to file as backup in case of restart
+      fs.writeFileSync("conversions.json", JSON.stringify(this.conversions), {encoding:'utf8',flag:'w'});
       return true;
     }
     remove_conversion(uid) {
@@ -304,14 +323,16 @@ class VerusRPC {
       }
       return undefined;
     }
-    get_conversion_by_details(currency, convertto, destination, received) {
+    get_conversion_by_details(currency, convertto, destination, amount, slippage=0.0) {
       let matches = [];
       for (let i in this.conversions) {
         let c = this.conversions[i];
-        if (c.received == received &&
-            c.currency == currency &&
-            c.convertto == convertto &&
-            c.destination == destination) {
+        let pAmount = c.received || c.estimate;
+        let gainloss = ((pAmount - amount) / amount) * 100.0;        
+        if ((c.received === amount || (Math.abs(gainloss) < slippage)) &&
+            c.currency === currency &&
+            c.convertto === convertto &&
+            c.destination === destination) {
             matches.push(c);
         }
       }
@@ -466,6 +487,9 @@ class VerusRPC {
       }
       if (address.endsWith("@")) {
         rpcMethod = "getidentity";
+      }
+      if (address.startsWith("0x")) {
+        return isAddress(address) === true;
       }
       let rsp = await this.request(rpcMethod, [address], false);
       if ((rsp && !rsp.error)) {
@@ -622,9 +646,11 @@ class VerusRPC {
               let conversions_success = [];
 
               // parse outputs in transaction for conversion progress
+              let now = Date.now();
               for (let i in tx.vout) {
                 let amount = 0;
                 let o = tx.vout[i];
+                let n = tx.vout[i].n;
                 if (o.scriptPubKey) {
                   let s = o.scriptPubKey;
                   // detect conversion starts
@@ -650,17 +676,18 @@ class VerusRPC {
                         amount = values[i];
                         //console.log(fees);
                         // add conversion
-                        this.add_conversion(txid, currency, this.currencyids[destcurrencyid], via, amount, destination, o.spentTxId);
+                        this.add_conversion(txid, currency, this.currencyids[destcurrencyid], via, amount, destination, n, now);
                         // update spentTxId for active conversions
                         if (o.spentTxId) {
                           for(let i in cmatches) {
                             let conversion = cmatches[i];
-                             // keep original spentTxid in sync
-                            if (!conversion.spentTxId || conversion.spentTxId != o.spentTxId) {
-                              conversion.spentTxId = o.spentTxId;
+                            if (conversion.convertto === this.currencyids[destcurrencyid] && (!conversion.spentTxId || conversion.spentTxId != o.spentTxId)) {
+                              conversion.spentTxId = o.spentTxId; // monitor for finalizeexport spentTxId
+                              conversion.spentTxId2 = undefined;  // force a new lookup
                             }
                           }
                         }
+                        now++;
                       }
                     }
 
@@ -690,6 +717,7 @@ class VerusRPC {
                               if (conversion.status === "pending") {
                                 conversion.status = "complete";
                                 conversion.received = amount;
+                                console.log("matched received n", n, conversion.n)
                               }
                             }
                           } else if (o.value && o.value > 0.0 && txid != conversion.txid && conversion.spentTxId && conversion.spentTxId2) {
@@ -699,6 +727,7 @@ class VerusRPC {
                               if (conversion.status === "pending") {
                                 conversion.status = "complete";
                                 conversion.received = amount;
+                                console.log("matched received n", n, conversion.n)
                               }
                             }
                           }
@@ -717,6 +746,10 @@ class VerusRPC {
                 if (conversion.status === "complete") {
                   conversion.status = "success";
                   conversion.finish = Date.now();
+                  
+                  // TODO, attempt to match by vout.n index
+                  //   they are suppose to be in same order, not necessarily same index ...
+                  
                   let closestIndex = 0;
                   let closest = this.get_closest(vout_amounts, conversion.estimate);
                   for (let i in vout_amounts) {
@@ -725,6 +758,7 @@ class VerusRPC {
                     }
                   }
                   if (closest !== conversion.received) {
+                    //console.log("matched received n", conversion.n, closestIndex);
                     console.log("conversion fixup, received does not match closest to estimate!", conversion.received, closest);
                     conversion.received = closest;
                   }
@@ -755,12 +789,12 @@ class VerusRPC {
       
       // remove some extra data we dont care about
       tx.hex = undefined;
-      tx.vin = tx.vin&&tx.vin.length?tx.vin.length:undefined;
-      tx.vout = tx.vout&&tx.vout.length?tx.vout.length:undefined;
+      //tx.vin = tx.vin&&tx.vin.length?tx.vin.length:undefined;
+      //tx.vout = tx.vout&&tx.vout.length?tx.vout.length:undefined;
       tx.vjoinsplit = tx.vjoinsplit&&tx.vjoinsplit.length?tx.vjoinsplit.length:undefined;
       tx.vShieldedSpend = tx.vShieldedSpend&&tx.vShieldedSpend.length?tx.vShieldedSpend.length:undefined;
       tx.vShieldedOutput = tx.vShieldedOutput&&tx.vShieldedOutput.length?tx.vShieldedOutput.length:undefined;
-      tx.valueBalance = tx.valueBalance?tx.valueBalance:undefined;
+      //tx.valueBalance = tx.valueBalance?tx.valueBalance:undefined;
       tx.bindingSig = undefined;
       tx.overwintered = undefined;
       
@@ -867,10 +901,25 @@ class VerusRPC {
       }
       return fee;
     }
-
+    async getcurrencyconverters(list, useCache) {
+      let r = undefined;
+      let rsp = await this.request("getcurrencyconverters", list, useCache);
+      if (rsp && !rsp.error) {
+        r = rsp.result;
+      }
+      return r;
+    }
     async estimateConversion(amount, from, to, via, useCache) {
       let r = undefined;
-      let rsp = await this.request("estimateconversion", [{"amount":amount, "currency":from, "convertto":to, "via":via}], useCache);
+      let params = {
+        "amount":amount,
+        "currency":from,
+        "convertto":to
+      };
+      if (via) {
+        params.via = via;
+      }
+      let rsp = await this.request("estimateconversion", [params], useCache);
       if (rsp && !rsp.error) {
         r = rsp.result;
       }
@@ -936,7 +985,7 @@ class VerusRPC {
           }
         }
         // if using z_sendmany, do not send currency unsupported
-        if (to.address.startsWith("zs1") || rpcMethod == "z_sendmany") {
+        if (to.address.startsWith("zs1") && rpcMethod == "z_sendmany") {
           to.currency = undefined;
         }
       }
@@ -951,13 +1000,79 @@ class VerusRPC {
         fee = undefined
         r.invalid.push("fee");
       }
-      if (fee && fee > 0) { params.push(fee); }
-
-      // clear invalid if needed
-      r.invalid = r.invalid.length>0?r.invalid:undefined;
+      if (fee && fee > 0) { params.push(fee); } else { params.push(0) }
 
       // verifyFirst!
-      if (verifyFirst || r.invalid) {
+      if (verifyFirst || r.invalid.length > 0) {
+        if (rpcMethod === "sendcurrency") {
+          // returntxparams, to get fees
+          let returntxparams = params.slice();
+          returntxparams.push(1);
+          if (returntxparams.length == 5) {
+            //console.log("returntx", rpcMethod, returntxparams);
+            let rsp = await this.request(rpcMethod, returntxparams, false);
+            if (rsp && !rsp.error) {
+              //console.log(rsp.result);
+              let rawtxhex = rsp.result.hextx || rsp.result.hextxwithoutz || "";
+              if (rawtxhex.length > 8) {
+                let rsp2 = await this.request("decoderawtransaction", [rawtxhex], false);
+                if (rsp2 && !rsp2.error) {
+                  let fees = {};
+                  if (!fees[this.getnativecoin()]) {
+                    fees[this.getnativecoin()] = 0;
+                  }
+                  if (rsp.result.feeamount) {
+                    fees[this.getnativecoin()] += rsp.result.feeamount;
+                    console.log("feeamount", rsp.result.feeamount, this.getnativecoin());
+                  }
+                  // go thru each vout checking for things
+                  for (let n in rsp2.result.vout) {
+                    let o = rsp2.result.vout[n];
+                    if (o.scriptPubKey) {
+                      if (o.scriptPubKey.reservetransfer) {
+                        let feecurrency = this.currencyids[o.scriptPubKey.reservetransfer.feecurrencyid];
+                        if (!fees[feecurrency]) {
+                          fees[feecurrency] = 0;
+                        }
+                        if (o.scriptPubKey.reservetransfer.fees) {
+                          fees[feecurrency] += o.scriptPubKey.reservetransfer.fees;
+                          console.log("reservetransfer.fees", o.scriptPubKey.reservetransfer.fees, feecurrency);
+                        }
+                        if (o.scriptPubKey.reservetransfer.destination && o.scriptPubKey.reservetransfer.destination.fees) {
+                          fees[feecurrency] += o.scriptPubKey.reservetransfer.destination.fees;
+                          console.log("reservetransfer.destination.fees", o.scriptPubKey.reservetransfer.destination.fees, feecurrency);
+                        }
+                      }
+                    }
+                  }
+                  r.fees = fees;
+
+                } else {
+                  console.log("rsp2.error", rsp2.error);
+                  r.invalid.push("error");
+                  r.error = rsp2.error;
+                }
+              } else {
+                if (fee && fee > 0) {
+                  r.fees[this.getnativecoin()] = fee;
+                } else {
+                  r.fees[this.getnativecoin()] = 0.0001;
+                }
+              }
+
+            } else {
+              console.log("rsp.error", rsp.error);
+              r.invalid.push("error");
+              r.error = rsp.error;
+            }
+          }
+        } else {
+          if (fee && fee > 0) {
+            r.fees[this.getnativecoin()] = fee;
+          } else {
+            r.fees[this.getnativecoin()] = 0.0001;
+          }
+        }
         r.verify = true;
         r.method = rpcMethod;
         r.params = params;
@@ -976,6 +1091,8 @@ class VerusRPC {
       } else {
         r = rsp;
       }
+      
+      console.log(r);
 
       return r;
     }
@@ -1119,20 +1236,6 @@ class VerusRPC {
                   }
                 }
               }
-              /*
-              // detect pre-launch happening (pre-converting)
-              if (currentBlockHeight > 0 && d.result.startblock && d.result.startblock > currentBlockHeight) {
-                this.prelaunch[name] = d.result.startblock;
-                if (!this.prelaunch[name]) {
-                  console.log("prelaunch detected", name, d.result.startblock);
-                } else if (d.result.startblock <= currentBlockHeight) {
-                  console.log("prelaunch ended", name, d.result.startblock);
-                  delete this.prelaunch[name];
-                } else {
-                  console.log("prelaunch detected", name, "blocks remaining", (d.result.startblock - currentBlockHeight), ", approx", (((d.result.startblock - currentBlockHeight)/1440.0) * 24.0).toFixed(2), "hours remain");
-                }
-              }
-              */
             }
           } else {
             console.error("unknown currency", list[i]);
@@ -1165,7 +1268,7 @@ class VerusRPC {
       if (rsp && !rsp.error) {
         if (Array.isArray(rsp.result)) {
           for (let a in rsp.result) {
-            addresses.identities.push(rsp.result[a].identity.name);
+            addresses.identities.push(rsp.result[a].identity.identityaddress);
           }
         }
       } else {
@@ -1313,6 +1416,46 @@ class VerusRPC {
       return {totals:totals, currencies:currencies, balances:balances};
     }
     
+    async getVolume(basketid, startBlock, endBlock) {
+      // basic sanity
+      if (endBlock < startBlock) {
+        startBlock = endBlock;
+      }
+      // limit to max 30K records to process (60 x 500)
+      if (endBlock - startBlock > 60) {
+        startBlock = (endBlock - 60);
+      }
+      let r = {};
+      let rsp = await this.request("getimports", [basketid, startBlock, endBlock], true);
+      if (rsp && !rsp.error) {
+        for (let i in rsp.result) {
+          let imp = rsp.result[i];
+          for (let c in imp.importnotarization.currencystate.currencies) {
+            let name = this.currencyids[c];
+            if (!r[name]) {
+              r[name] = {reservein:0, reserveout:0, primarycurrencyin:0, primarycurrencyout:0}
+            }
+            let cd = imp.importnotarization.currencystate.currencies[c];
+            if (cd.reservein) {
+              r[name].reservein += cd.reservein;
+            }
+            if (cd.reserveout) {
+              r[name].reserveout += cd.reserveout;
+            }
+            if (cd.primarycurrencyin) {
+              r[name].primarycurrencyin += cd.primarycurrencyin;
+            }
+            if (cd.primarycurrencyout) {
+              r[name].primarycurrencyout += cd.primarycurrencyout;
+            }
+          }
+        }
+        if (rsp.result) {
+          console.log(r);
+        }
+      }
+      return r;
+    }
 };
 
 module.exports = VerusRPC;

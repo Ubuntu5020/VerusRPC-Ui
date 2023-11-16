@@ -1,26 +1,18 @@
 <h2 class="accordion-header" id="transactions-heading{{id}}">
 <button class="accordion-button collapsed m-0" type="button" data-bs-toggle="collapse" data-bs-target="#transactions-collapse{{id}}" aria-expanded="false" aria-controls="transactions-collapse{{id}}">
   <span class="p-0">{{ c.uid | truncate: 9}}{{ c.uid | slice: -6, 6 }}</span>
-  {% if c.status == "closed" %}
-  {% if c.closedby.status != "pending" %}
-    {% assign gainloss = c.closedby.received | minus: c.amount | divided_by: c.amount | times: 100 | round: 2 %}
-    <span class="badge text-bg-{% if gainloss > 0 %}success{%else%}danger{%endif%} p-2 px-3 ms-2">
-    {% if gainloss > 0 %}+{%endif%}{{ c.closedby.received | minus: c.amount | divided_by: c.amount | times: 100 | round: 2 }}%
-    {% if gainloss > 0 %}+{%endif%}{{ c.closedby.received | minus: c.amount | round : 6 }} {{c.currency}}
-    </span>
-  {% else %}
-    <span class="badge text-bg-warning rounded-pill p-2 px-3 ms-2"> close pending </span>
-  {% endif %}
-  <span class="p-1 ms-2">position closed by {{ c.closedby.uid | truncate: 9}}{{ c.closedby.uid | slice: -6, 6 }}</span>
-  {% elsif c.status != "success" %}
+  
+  {% if c.status != "success" and c.status != "closed" %}
   <span class="badge text-bg-warning rounded-pill p-2 px-3 ms-2">
     {{ c.status }}
   </span>
   {% endif %}
-  {% if c.status != "closed" %}
+  
   <span class="badge text-bg-secondary rounded-pill p-2 px-3 ms-2">
   {{ c.amount | round: 6 }} {{c.currency}}
   </span>
+  
+  {% if c.status != "closed" %}
   {% if c.status == "success" %}
   <span class="badge text-bg-primary rounded-pill p-2 px-3 ms-2">
   {% else %}
@@ -28,33 +20,55 @@
   {% endif %}
   {% if c.received %}
   {{ c.received | round: 6 }}
+  {% elsif c.estimate %}
+  ~{{ c.estimate | round: 6 }}
   {% endif %}
   {{c.convertto}}
   </span>
-  {% if c.estimate_reverse > c.amount %}
-    {% assign gainloss = c.estimate_reverse | minus: c.amount | divided_by: c.amount | times: 100 | round: 2 %}
+  {% endif %}
+
+  {% if c.status == "success" %}
+  {% for i in c.estimate_reverse %}
+  {% if not c.via or i[0] == c.via and i[1] > c.amount %}
+    {% assign gainloss = i[1] | minus: c.amount | divided_by: c.amount | times: 100 | round: 2 %}
     {% if gainloss > 0.1 %}
-    <span class="badge text-bg-light rounded-pill p-2 px-3 ms-2"> REVERSE {{ gainloss }}% ({{c.estimate_reverse | round: 6 }}) </span>
+    <span class="badge text-bg-light rounded-pill p-2 px-3 ms-2"> CB {{ gainloss }}%</span>
     {% endif %}
   {% endif %}
+  {% endfor %}
   {% endif %}
-  
+  {% if c.status == "closed" and c.closedby.status != "pending" %}
+  {% assign gainloss = c.closedby.received | minus: c.amount | divided_by: c.amount | times: 100 | round: 2 %}
+  <span class="badge text-bg-primary rounded-pill p-2 px-3 ms-2"> {{ c.closedby.received | round: 6 }} {{ c.currency }}</span>
+  <span class="badge text-bg-{% if gainloss > 0 %}success{%else%}danger{%endif%} p-2 px-3 ms-2">
+  {% if gainloss > 0 %}+{%endif%}{{ c.closedby.received | minus: c.amount | divided_by: c.amount | times: 100 | round: 2 }}%
+  {% if gainloss > 0 %}+{%endif%}{{ c.closedby.received | minus: c.amount | round : 6 }} {{c.currency}}
+  </span>
+  {% elsif c.status == "closed" %}
+  {% assign gainloss = c.closedby.estimate | minus: c.amount | divided_by: c.amount | times: 100 | round: 2 %}
+  <span class="badge text-bg-secondary rounded-pill p-2 px-3 ms-2"> ~{{ c.closedby.estimate | round: 6 }} {{ c.currency }}</span>
+  <span class="badge text-bg-warning p-2 px-3 ms-2">
+  {% if gainloss > 0 %}+{%endif%}{{ c.closedby.estimate | minus: c.amount | divided_by: c.amount | times: 100 | round: 2 }}%
+  {% if gainloss > 0 %}+{%endif%}{{ c.closedby.estimate | minus: c.amount | round : 6 }} {{c.currency}}
+  </span>
+  {% endif %}
 </button>
 </h2>
 <div id="transactions-collapse{{id}}" class="accordion-collapse collapse m-0 p-0 mt-2" aria-labelledby="transactions-heading{{id}}" data-bs-parent="#accordionConversions">
   <div class="accordion-body m-0 p-0">
     <div class="mb-2">
-    {% if c.estimate_reverse > c.amount and c.status == "success"  %}
+    {% if c.status == "success" and gainloss > 0.0 %}
     <a class="btn btn-success convert-reverse position-relative top-0 start-0" href="/convert/reverse/{{c.uid}}">CONVERT BACK</a>
-    {% elsif c.status == "success" %}
+    {% else %}
     <a class="btn btn-danger convert-reverse position-relative top-0 start-0" href="/convert/reverse/{{c.uid}}">CONVERT BACK</a>
     {% endif %}
-    <a class="btn btn-secondary position-relative top-0 start-0" href="{{vars.explorers[vars.coin].txUrl}}{{c.txid}}" target="_blank">Input TXID</a>
+    
+    <a class="btn btn-secondary position-relative top-0 start-0" href="/api/transaction/{{c.txid}}" target="_blank">Input TXID</a>
     {% if c.spentTxId %}
-    <a class="btn btn-secondary position-relative top-0 start-0" href="{{vars.explorers[vars.coin].txUrl}}{{c.spentTxId}}" target="_blank">Spent TXID</a>
+    <a class="btn btn-secondary position-relative top-0 start-0" href="/api/transaction/{{c.spentTxId}}" target="_blank">Spent TXID</a>
     {% endif %}
     {% if c.spentTxId2 %}
-    <a class="btn btn-secondary position-relative top-0 start-0" href="{{vars.explorers[vars.coin].txUrl}}{{c.spentTxId2}}" target="_blank">Output TXID</a>
+    <a class="btn btn-secondary position-relative top-0 start-0" href="/api/transaction/{{c.spentTxId2}}" target="_blank">Output TXID</a>
     {% endif %}
     {% if c.status != "pending" %}
     <a class="btn btn-secondary clear-uid position-relative top-0 start-0 bg-dark-subtle" href="/api/conversion/clear/{{c.uid}}" target="_blank">CLEAR</a>

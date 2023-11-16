@@ -161,6 +161,15 @@ async function getCurrency(req,res) {
   }
 }
 
+async function getIdentity(req,res) {
+    let rsp = await rpc.request("getidentity", [req.params.id], false);
+    if ((rsp && !rsp.error)) {
+        res.status(200).type('application/json').send(rsp.result);
+    } else {
+        res.status(500).type('application/json').send({error: 500});
+    }
+}
+
 async function getInfo(req,res) {
     let result = await rpc.getInfo();
     if (result != undefined) {
@@ -178,6 +187,16 @@ async function getMiningInfo(req,res) {
         res.status(500).type('application/json').send({error: 500});
     }
 }
+
+async function getTransaction(req,res) {  
+    let result = await rpc.getRawTransaction(req.params.txid, true);
+    if (result != undefined) {
+        res.status(200).type('application/json').send(result);
+    } else {
+        res.status(500).type('application/json').send({error: 500});
+    }
+}
+
 
 
 
@@ -252,6 +271,18 @@ async function renderConvertCurrency(req,res) {
   }
 }
 
+async function renderExportToCurrency(req,res) {
+  const tvar = await rpc.getTemplateVars(true);
+  if (tvar != undefined) {
+    res.render('export', {
+      title: 'Send Cross-Chain',
+      vars: tvar
+    })
+  } else {
+      res.status(500).type('application/json').send({error: 500});
+  }
+}
+
 async function handleSendCurrency(req,res) {
     let minconf = 1; // sanitize to integer
     if (req.body.minconf) { try { minconf = parseInt(req.body.minconf); } catch { minconf = 1; } }
@@ -271,11 +302,17 @@ async function handleSendCurrency(req,res) {
       if (!toAddress) {
         break;
       }
-      
+
       let amount = req.body["amount" + i];
       let currency = req.body["currency" + i];
       let convertto = req.body["convertto" + i];
+      let preconvert = req.body["preconvert" + i];
       let via = req.body["via" + i];
+
+      let exportto = req.body["exportto" + i];
+      
+      // *Note, when exporting currency mapping
+      //"exportcurrency":true,"feecurrency":"veth"
 
       // sanitize to Number
       try { amount = Number(amount); } catch { amount = 0; }
@@ -297,7 +334,7 @@ async function handleSendCurrency(req,res) {
       // ignore empty entries
       if (toAddress) {
         // subtract fee from first amount only
-        if (i == 0) {
+        if (i == 0 && currency == rpc.getnativecoin()) {
           if (amount && amount > 0 && fee && fee > 0 && (req.body.subtractfee === true || req.body.subtractfee === "true")) {
               amount = (amount - fee);
           }
@@ -326,10 +363,19 @@ async function handleSendCurrency(req,res) {
             invalid.push("via"+i);
           }
         }
+        if (exportto && via != " ") {
+          if (exportto.length > 0) {
+            param.exportto = exportto;
+          } else {
+            // invalid convert via
+            invalid.push("exportto"+i);
+          }
+        }
         if (needsEstimate) {
           let estimate = await rpc.estimateConversion(param.amount, param.currency, param.convertto, param.via, false);
           if (estimate && estimate.estimatedcurrencyout) {
             estimates.push(estimate.estimatedcurrencyout);
+            console.log("conversion estimate", param.amount, param.currency, "to", estimate.estimatedcurrencyout, param.convertto, "via", param.via);
           } else {
             invalid.push("currency"+i);
             invalid.push("convertto"+i);
@@ -343,7 +389,8 @@ async function handleSendCurrency(req,res) {
 
     // if we have invalid entries
     if (invalid.length > 0) {
-      let result = { invalid: invalid, estimates: estimates };
+      let result = { invalid: invalid, estimates: estimates, params: params };
+      console.log("invalid", result);
       res.status(500).type('application/json').send(result);
       return;
     }
@@ -353,7 +400,8 @@ async function handleSendCurrency(req,res) {
 
     // perform rpc request
     if (params.length > 0) {
-      let result = await rpc.sendCurrency(req.body.fromAddress, params, minconf, fee, verifyFirst);
+      let fromAddress = req.body.fromAddress;
+      let result = await rpc.sendCurrency(fromAddress, params, minconf, fee, verifyFirst);
       if (result) {
         result.estimates = estimates;
       }
@@ -411,6 +459,13 @@ router.post('/convert', urlencodedParser, (req, res) => {
   handleSendCurrency(req, res);
 })
 
+router.get('/exportto', (req, res) => {
+  renderExportToCurrency(req, res);
+})
+router.post('/exportto', urlencodedParser, (req, res) => {
+  handleSendCurrency(req, res);
+})
+
 
 // API
 router.get('/api/conversions', (req, res) => {
@@ -447,6 +502,9 @@ router.get('/api/currencies', (req, res) => {
 router.get('/api/currency/:currency', (req, res) => {
     getCurrency(req, res);
 });
+router.get('/api/identity/:id', (req, res) => {
+    getIdentity(req, res);
+});
 router.get('/api/info', (req, res) => {
     getInfo(req, res);
 });
@@ -457,10 +515,11 @@ router.get('/api/tickers', (req, res) => {
     res.status(200).type('application/json').send(rpc.tickers);
 });
 
-
+router.get('/api/transaction/:txid', (req, res) => {
+    getTransaction(req, res);
+});
 
 // DIRECT RPC (Dev Only, temp for testing)
-
 router.get('/rpc/:method', (req, res) => {
     unsafeRpcGET(req, res);
 });
@@ -470,7 +529,6 @@ router.get('/rpc/:method/:params', (req, res) => {
 router.post('/rpc/:method', urlencodedParser, (req, res) => {
     unsafeRpcPOST(req, res);
 });
-
 
 router.init = init
 module.exports = router

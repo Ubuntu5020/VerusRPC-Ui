@@ -13,6 +13,9 @@ class VerusPROC {
         this.templateCacheInterval = 60000;
         this.lastTemplateCache = 0;
         this.verbose = verbose;
+        
+        this.lastBlockGetVolume = 0;
+        this.lastCoinPaprikaCoin = "";
     }
         
     async getHttpsResponse(url) {
@@ -30,68 +33,60 @@ class VerusPROC {
       return await p;
     }
     
-    async getCoinPaprikaTicker(currencyId) {
+    async getCoinPaprikaTickers() {
       // if currency id is known currency on coinpaprika
       let j = undefined;
-      let cpobj = coinpaprikaids[currencyId];
-      if (cpobj) {
-        let r = await this.getHttpsResponse(cpobj.ticker);
-        try {
-          j = JSON.parse(r)
-        } catch {
+      let r = await this.getHttpsResponse("https://api.coinpaprika.com/v1/tickers?quotes=BTC,USD");
+      try {
+        j = JSON.parse(r)
+        if (j.error && j.type && j.soft_limit) {
+          console.log("coinpaprika.error", j.type, j.soft_limit, "blocked for", j.block_duration);
           j = undefined;
-        }       
+        } else if (j.error) {
+          console.log("coinpaprika.error", j.error);
+          j = undefined;
+        }
+      } catch {
+        j = undefined;
       }
       return j;
     }
 
-    async recacheTemplateVars() {
-      let now = Date.now();
-      if (this.templateCacheInterval < (now - this.lastTemplateCache)) {
-        console.log("cache full update...");
-        // keep template variables cache up to date
-        await this.verus.getTemplateVars(false);
-        this.lastTemplateCache = Date.now();
-        // update market prices for known currencies
-        for (let name in this.verus.currencies) {
-          let currency = this.verus.currencies[name];
-          let market = await this.getCoinPaprikaTicker(currency.currencyid);
-          if (market) {
-            this.verus.set_market_ticker(name, market);
-          }
-        }
-        
-      } else {
-        console.log("cache quick update...");
-        // keep checking critical cache items like opid/txid monitoring
-        await this.verus.getTemplateVars(undefined);
-      }
-
+    async monitorConversions() {
       // monitor conversions
       let conversions = this.verus.get_conversions();
       for (let i in conversions) {
         let c = conversions[i];
-        // check to see if this conversion closes the position of a previous conversion
-        let matches = this.verus.get_conversion_by_details(c.convertto, c.currency, c.destination, c.amount);
+        // check to see if this conversion is the reverse of a previous conversion
+        let matches = this.verus.get_conversion_by_details(c.convertto, c.currency, c.destination, c.amount, 0.5);
         if (matches.length > 0) {
           for (let i in matches) {
-            if (matches[i].status == "success") {
-              matches[i].status="closed";
-              matches[i].closedby=c;
-              console.log("closed conversion position", matches[i].txid, "with", c.txid);
-            }
+            //if (c.started > matches[i].started) {
+              if (!c.closedby && !c.closed && matches[i].status === "success") {
+                c.closed = matches[i].uid;
+                matches[i].status="closed";
+                matches[i].closedby = c;
+                console.log("conversion position closed", matches[i].uid, "with", c.uid, c);
+              }
+            //}
           }
         }
-        
         // check conversions for progress
         if (c.status !== "closed") {
-          if (c.status == "success") {
-            // monitor estimates for conversion back
-            let e = await this.verus.estimateConversion(c.received, c.convertto, c.currency, c.via, false);
+          // do some estimates
+          if (c.status == "success" || c.estimate) {
+            // estimate converting back
+            if (!c.estimate_reverse) { c.estimate_reverse = {}; }
+            // estimate direct conversion
+            let e = await this.verus.estimateConversion(c.received||c.estimate, c.convertto, c.currency, c.via, false);
             if (e) {
-              c.estimate_reverse = e.estimatedcurrencyout;
-            }
+              let via = " "; // via not used
+              if (c.via) { via = c.via; }
+              c.estimate_reverse[via] = e.estimatedcurrencyout;
+            }/80
           }
+          
+          // check spentTxId's for progress
           if (c.spentTxId2) {
             let tx = await this.verus.getRawTransaction(c.spentTxId2, false, false);
             if (!tx || tx.error) {
@@ -112,6 +107,50 @@ class VerusPROC {
           await this.verus.getRawTransaction(c.txid, false, false);
         }
       }
+    }
+    
+    async cacheCoinPaprika() {
+      let market = await this.getCoinPaprikaTickers();
+      if (market) {
+        for (let i in market) {
+          let ticker = market[i];
+          if (coinpaprikaids[ticker.id]) {
+            let currency = this.verus.currencies[this.verus.currencyids[coinpaprikaids[ticker.id]]];
+            if (currency) {
+              this.verus.set_market_ticker(currency.fullyqualifiedname, ticker);
+            }
+          }
+        }
+      } else {
+        console.log("failed to get market data from coinpaprika for", name);
+      }
+    }
+    
+    async recacheTemplateVars() {
+      let now = Date.now();
+      
+      if (this.templateCacheInterval < (now - this.lastTemplateCache)) {
+        console.log("cache full update...");
+        // cache market stats
+        await this.cacheCoinPaprika();
+        // keep template variables cache up to date
+        await this.verus.getTemplateVars(false);
+        this.lastTemplateCache = Date.now();        
+        
+      } else {        
+        // keep checking critical cache items like opid/txid monitoring
+        await this.verus.getTemplateVars(undefined);
+      }
+
+      await this.monitorConversions();
+      
+      /* TODO price/volume tracking
+      if (this.verus.info && this.lastBlockGetVolume != this.verus.info.blocks) {
+        if (this.lastBlockGetVolume === 0) { this.lastBlockGetVolume = this.verus.info.blocks; }
+        await this.verus.getVolume("Bridge.vETH", this.lastBlockGetVolume, this.verus.info.blocks);
+        this.lastBlockGetVolume = this.verus.info.blocks;
+      }
+      */
     }
     
     async runOnce() {

@@ -4,7 +4,15 @@
 <div class="card container-sm mb-2">
   <div class="card-body">  
   {% if reverse_convert %}
-  {% assign gainloss = reverse_convert.estimate_reverse | minus: reverse_convert.amount | divided_by: reverse_convert.amount | times: 100 | round: 2 %}
+  {% assign estimate_via = " " %}
+  {% assign estimate_reverse = 0 %}
+  {% for i in reverse_convert.estimate_reverse %}
+  {% if not reverse_convert.via or i[0] == reverse_convert.via and i[1] > estimate_reverse %}
+  {% assign estimate_via = i[0] %}
+  {% assign estimate_reverse = i[1] %}
+  {% endif %}
+  {% endfor %}
+  {% assign gainloss = estimate_reverse | minus: reverse_convert.amount | divided_by: reverse_convert.amount | times: 100 | round: 2 %}
   <h5 class="card-title">Reverse Conversion</h5>
   <p> </p>
   <div class="alert alert-info">
@@ -12,8 +20,8 @@
     <span class="badge text-bg-secondary rounded-pill p-2 px-3 ms-2">{{ reverse_convert.amount | round: 6 }} {{reverse_convert.currency}}</span>
     <span class="badge text-bg-primary rounded-pill p-2 px-3 ms-2">{{ reverse_convert.received | round: 6 }} {{reverse_convert.convertto}}</span>
     <span class="badge text-bg-{% if gainloss > 0 %}success{%else%}danger{%endif%} p-2 px-3 ms-2">
-      {% if gainloss > 0 %}+{%endif%}{{ reverse_convert.estimate_reverse | minus: reverse_convert.amount | divided_by: reverse_convert.amount | times: 100 | round: 2 }}%
-      {% if gainloss > 0 %}+{%endif%}{{ reverse_convert.estimate_reverse | minus: reverse_convert.amount | round : 6 }} {{reverse_convert.currency}}
+      {% if gainloss > 0 %}+{%endif%}{{ estimate_reverse| minus: reverse_convert.amount | divided_by: reverse_convert.amount | times: 100 | round: 2 }}%
+      {% if gainloss > 0 %}+{%endif%}{{ estimate_reverse | minus: reverse_convert.amount | round : 6 }} {{reverse_convert.currency}}
     </span>
   </div>
   {% else %}
@@ -94,15 +102,14 @@
             <span class="input-group-text justify-content-end" id="basic-addon1" style="min-width:7rem;">Convert Via</span>
             <select name="via0" id="via0" class="form-select" aria-label="SelectCurrency">
               {% if reverse_convert %}
-              <option value="{{ reverse_convert.via }}" selected>{{ reverse_convert.via }}</option>
-              {% else %}
+              <option value="{{ estimate_via }}">{{ estimate_via }}</option>
+              {% endif %}
               <option value=""> </option>
               {% for c in vars.currencies %}
-              {% if c[1].isFractional and c[1].currencies.length > 1 and c[1].startblock < vars.info.blocks %}
+              {% if c[1].isFractional and c[1].currencies.length > 1 and c[1].startblock < vars.info.blocks and c[0] != estimate_via %}
               <option value="{{c[0]}}">{{c[0]}}</option>
               {% endif %}
               {% endfor %}
-              {% endif %}
             </select>
           </div>
         </div>
@@ -131,7 +138,7 @@
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
           <div class="modal-header">
-            <h1 class="modal-title fs-5" id="staticConfirmBackdropLabel">Send Currency Confirm</h1>
+            <h1 class="modal-title fs-5" id="staticConfirmBackdropLabel">Conversion Estimate</h1>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div id="sendConfirmBody" class="modal-body">
@@ -176,26 +183,36 @@ function showConfirmModel(rsp) {
 
   let usersHtml = "Send";
   let totalAmount = {};
-  let firstCurrency = undefined;
-  if (rsp.estimates) {
-    usersHtml = "Convert";
+  if (rsp.estimates && rsp.estimates.length > 0) {
+    usersHtml = "Estimate";
   }
   for (let i=0; i<total_tousers; i++) {
     let toaddr =  $('#toAddress'+i).val();
     let amount = $('#amount'+i).val();
     let currency = $('#currency'+i).val();
-    if (!firstCurrency) { firstCurrency = currency; }
     if (totalAmount[currency]) {
       totalAmount[currency] += Number(amount);
     } else {
       totalAmount[currency] = Number(amount);
     }
     if (rsp.estimates && rsp.estimates[i]) {
-      toaddr = rsp.estimates[i] + " " + $('#convertto'+i).val();
+      toaddr = "~" + rsp.estimates[i] + " " + $('#convertto'+i).val();
     }
     usersHtml += '<div class="row m-0 p-1 pb-2"><code class="text-lg">' + amount + ' ' + currency + ' to '+ toaddr + '</code></div>';
   }
-  let html = '<div class="row m-0 p-1">' + usersHtml + '</div>';
+  let html = usersHtml;
+  if (rsp.fees) {
+    html += '<div class="row m-0 p-1 pt-0">Fees';
+    for (let c in rsp.fees) {
+      if (totalAmount[c]) {
+        totalAmount[c] += rsp.fees[c];
+      } else {
+        totalAmount[c] = rsp.fees[c];
+      }
+      html += '<span><code class="text-lg">' + rsp.fees[c].toFixed(8) + ' ' + c + '</code></span>';
+    }
+    html += "</div>";
+  }
   if (Object.keys(totalAmount).length > 0) {
     html += '<div class="row m-0 p-1 pt-0">Total';
     for (let t in totalAmount) {
